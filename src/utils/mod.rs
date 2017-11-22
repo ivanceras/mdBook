@@ -2,6 +2,8 @@ pub mod fs;
 
 use pulldown_cmark::{html, Event, Options, Parser, Tag, OPTION_ENABLE_FOOTNOTES,
                      OPTION_ENABLE_TABLES};
+#[cfg(feature = "spongedown")]
+use spongedown;
 use std::borrow::Cow;
 
 
@@ -9,6 +11,7 @@ use std::borrow::Cow;
 ///
 /// Wrapper around the pulldown-cmark parser and renderer to render markdown
 
+#[cfg(not(feature = "spongedown"))]
 pub fn render_markdown(text: &str, curly_quotes: bool) -> String {
     let mut s = String::with_capacity(text.len() * 3 / 2);
 
@@ -23,6 +26,11 @@ pub fn render_markdown(text: &str, curly_quotes: bool) -> String {
 
     html::push_html(&mut s, events);
     s
+}
+
+#[cfg(feature = "spongedown")]
+pub fn render_markdown(text: &str, curly_quotes: bool) -> String {
+    spongedown::parse(text)
 }
 
 struct EventQuoteConverter {

@@ -80,6 +80,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 extern crate pulldown_cmark;
+#[cfg(feature = "spongedown")]
+extern crate spongedown;
 extern crate regex;
 extern crate serde;
 #[macro_use]
