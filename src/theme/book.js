@@ -323,23 +323,26 @@ function playpen_text(playpen) {
 
     function set_theme(theme) {
         let ace_theme;
+        var is_dark = false;
 
         if (theme == 'coal' || theme == 'navy') {
             stylesheets.ayuHighlight.disabled = true;
             stylesheets.tomorrowNight.disabled = false;
             stylesheets.highlight.disabled = true;
-
+            is_dark = true;
             ace_theme = "ace/theme/tomorrow_night";
         } else if (theme == 'ayu') {
             stylesheets.ayuHighlight.disabled = false;
             stylesheets.tomorrowNight.disabled = true;
             stylesheets.highlight.disabled = true;
             ace_theme = "ace/theme/tomorrow_night";
+            is_dark = true;
         } else {
             stylesheets.ayuHighlight.disabled = true;
             stylesheets.tomorrowNight.disabled = true;
             stylesheets.highlight.disabled = false;
             ace_theme = "ace/theme/dawn";
+            is_dark = false;
         }
 
         setTimeout(function () {
@@ -356,7 +359,17 @@ function playpen_text(playpen) {
         try { previousTheme = localStorage.getItem('mdbook-theme'); } catch (e) { }
         if (previousTheme === null || previousTheme === undefined) { previousTheme = default_theme; }
 
-        try { localStorage.setItem('mdbook-theme', theme); } catch (e) { }
+        var rustdocTheme;
+        if (is_dark){
+            rustdocTheme = "dark";
+        }else{
+            rustdocTheme = "light";
+        }
+
+        try {
+            localStorage.setItem('mdbook-theme', theme);
+            localStorage.setItem('rustdoc-theme', rustdocTheme); // also change the themes of rustdocs
+        } catch (e) { }
 
         document.body.className = theme;
         html.classList.remove(previousTheme);
