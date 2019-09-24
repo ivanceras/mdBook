@@ -1,26 +1,21 @@
 environment:
   global:
     PROJECT_NAME: mdBook
-    nodejs_version: "6"
   matrix:
     # Stable channel
     - TARGET: i686-pc-windows-msvc
       RUST_CHANNEL: stable
     - TARGET: x86_64-pc-windows-msvc
       RUST_CHANNEL: stable
-    # Beta channel
-    - TARGET: i686-pc-windows-msvc
-      RUST_CHANNEL: beta
-    - TARGET: x86_64-pc-windows-msvc
-      RUST_CHANNEL: beta
     # Nightly channel
-    - TARGET: i686-pc-windows-msvc
-      RUST_CHANNEL: nightly
     - TARGET: x86_64-pc-windows-msvc
       RUST_CHANNEL: nightly
 
 # Install Rust and Cargo
 install:
+  # Since rust-lang-libs is currently sharing 1 builder, only run 1 job when a
+  # PR is opened. Merges to master or tags will run all jobs.
+  - ps: if ($env:APPVEYOR_PULL_REQUEST_NUMBER -gt 0 -and ($env:TARGET -ne "x86_64-pc-windows-msvc" -or $env:RUST_CHANNEL -ne "stable") ) {Exit-AppveyorBuild}
   - ps: >-
       If ($Env:TARGET -eq 'x86_64-pc-windows-gnu') {
         $Env:PATH += ';C:\msys64\mingw64\bin'
@@ -32,22 +27,17 @@ install:
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
   - rustc -Vv
   - cargo -V
-  - ps: Install-Product node $env:nodejs_version
-  - node --version
-  - npm --version
-  - npm install -g stylus nib
 
 build: false
 
 # Equivalent to Travis' `script` phase
 test_script:
-  - cargo build --verbose
-  - cargo build --verbose --features=regenerate-css
-  - cargo test --verbose
+  - cargo test --all
+  - cargo test --all --no-default-features
 
 before_deploy:
   # Generate artifacts for release
-  - cargo build --release
+  - cargo rustc --bin mdbook --release -- -C lto
   - mkdir staging
   - copy target\release\mdbook.exe staging
   - cd staging
@@ -57,8 +47,7 @@ before_deploy:
 deploy:
   description: 'Windows release'
   artifact: /.*\.zip/
-  auth_token:
-    secure: QQhjKVyz7mpjlyGhlXytbFQQfKFQWTahHkD+B0NzIUoEVqO7ZLWjnoWasvLqW4nE
+  auth_token: $(GITHUB_TOKEN)
   provider: GitHub
   on:
     RUST_CHANNEL: stable
@@ -67,3 +56,4 @@ deploy:
 branches:
   only:
     - master
+    - /^v\d+\.\d+\.\d+.*$/

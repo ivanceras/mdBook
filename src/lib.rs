@@ -1,129 +1,169 @@
 //! # mdBook
 //!
-//! **mdBook** is similar to Gitbook but implemented in Rust.
-//! It offers a command line interface, but can also be used as a regular crate.
+//! **mdBook** is a tool for rendering a collection of markdown documents into
+//! a form more suitable for end users like HTML or EPUB.  It offers a command
+//! line interface, but this crate can be used if more control is required.
 //!
-//! This is the API doc, but you can find a [less "low-level" documentation here](../index.html)
-//! that contains information about the command line tool, format, structure etc.
-//! It is also rendered with mdBook to showcase the features and default theme.
+//! This is the API doc, the [user guide] is also available if you want
+//! information about the command line tool, format, structure etc. It is also
+//! rendered with mdBook to showcase the features and default theme.
 //!
 //! Some reasons why you would want to use the crate (over the cli):
 //!
 //! - Integrate mdbook in a current project
 //! - Extend the capabilities of mdBook
 //! - Do some processing or test before building your book
-//! - Write a new Renderer
+//! - Accessing the public API to help create a new Renderer
 //! - ...
 //!
-//! ## Example
+//! > **Note:** While we try to ensure `mdbook`'s command-line interface and
+//! > behaviour are backwards compatible, the tool's internals are still
+//! > evolving and being iterated on. If you wish to prevent accidental
+//! > breakages it is recommended to pin any tools building on top of the
+//! > `mdbook` crate to a specific release.
 //!
-//! ```no_run
-//! extern crate mdbook;
+//! # Examples
 //!
+//! If creating a new book from scratch, you'll want to get a `BookBuilder` via
+//! the `MDBook::init()` method.
+//!
+//! ```rust,no_run
 //! use mdbook::MDBook;
-//! use std::path::PathBuf;
+//! use mdbook::config::Config;
 //!
-//! fn main() {
-//!     let mut md = MDBook::new("my-book");
-//!     
-//!     // tweak the book configuration a bit
-//!     md.config.book.src = PathBuf::from("source");
-//!     md.config.book.build_dir = PathBuf::from("book");
-//! 
-//!     // Render the book
-//!     md.build().unwrap();                        
-//! }
+//! let root_dir = "/path/to/book/root";
+//!
+//! // create a default config and change a couple things
+//! let mut cfg = Config::default();
+//! cfg.book.title = Some("My Book".to_string());
+//! cfg.book.authors.push("Michael-F-Bryan".to_string());
+//!
+//! MDBook::init(root_dir)
+//!     .create_gitignore(true)
+//!     .with_config(cfg)
+//!     .build()
+//!     .expect("Book generation failed");
 //! ```
 //!
-//! ## Implementing a new Renderer
+//! You can also load an existing book and build it.
 //!
-//! If you want to create a new renderer for mdBook, the only thing you have to do is to implement
-//! the [Renderer trait](renderer/renderer/trait.Renderer.html)
+//! ```rust,no_run
+//! use mdbook::MDBook;
 //!
-//! And then you can swap in your renderer like this:
+//! let root_dir = "/path/to/book/root";
 //!
-//! ```no_run
-//! # extern crate mdbook;
-//! #
-//! # use mdbook::MDBook;
-//! # use mdbook::renderer::HtmlHandlebars;
-//! #
-//! # #[allow(unused_variables)]
-//! # fn main() {
-//! #   let your_renderer = HtmlHandlebars::new();
-//! #
-//! let book = MDBook::new("my-book").set_renderer(Box::new(your_renderer));
-//! # }
+//! let mut md = MDBook::load(root_dir)
+//!     .expect("Unable to load the book");
+//! md.build().expect("Building failed");
 //! ```
-//! If you make a renderer, you get the book constructed in form of `Vec<BookItems>` and you get
-//! the book config in a `BookConfig` struct.
 //!
-//! It's your responsability to create the necessary files in the correct directories.
+//! ## Implementing a new Backend
 //!
-//! ## utils
+//! `mdbook` has a fairly flexible mechanism for creating additional backends
+//! for your book. The general idea is you'll add an extra table in the book's
+//! `book.toml` which specifies an executable to be invoked by `mdbook`. This
+//! executable will then be called during a build, with an in-memory
+//! representation ([`RenderContext`]) of the book being passed to the
+//! subprocess via `stdin`.
 //!
-//! I have regrouped some useful functions in the [utils](utils/index.html) module, like the
-//! following function [`utils::fs::create_file(path:
-//! &Path)`](utils/fs/fn.create_file.html)
+//! The [`RenderContext`] gives the backend access to the contents of
+//! `book.toml` and lets it know which directory all generated artefacts should
+//! be placed in. For a much more in-depth explanation, consult the [relevant
+//! chapter] in the *For Developers* section of the user guide.
 //!
-//! This function creates a file and returns it. But before creating the file
-//! it checks every directory in the path to see if it exists, and if it does
-//! not it will be created.
+//! To make creating a backend easier, the `mdbook` crate can be imported
+//! directly, making deserializing the `RenderContext` easy and giving you
+//! access to the various methods for working with the [`Config`].
 //!
-//! Make sure to take a look at it.
+//! [user guide]: https://rust-lang-nursery.github.io/mdBook/
+//! [`RenderContext`]: renderer/struct.RenderContext.html
+//! [relevant chapter]: https://rust-lang-nursery.github.io/mdBook/for_developers/backends.html
+//! [`Config`]: config/struct.Config.html
+
+#![deny(missing_docs)]
+#![deny(rust_2018_idioms)]
 
 #[macro_use]
 extern crate error_chain;
-extern crate handlebars;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
-extern crate pulldown_cmark;
+pub use pulldown_cmark;
+pub use regex;
+pub use serde;
 #[cfg(feature = "spongedown")]
 extern crate spongedown;
-extern crate regex;
-extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
-extern crate tempdir;
-extern crate toml;
 
-mod parse;
-mod preprocess;
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
+
 pub mod book;
 pub mod config;
+pub mod preprocess;
 pub mod renderer;
 pub mod theme;
 pub mod utils;
 
-pub use book::MDBook;
-pub use book::BookItem;
-pub use renderer::Renderer;
+/// The current version of `mdbook`.
+///
+/// This is provided as a way for custom preprocessors and renderers to do
+/// compatibility checks.
+pub const MDBOOK_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub use crate::book::BookItem;
+pub use crate::book::MDBook;
+pub use crate::config::Config;
+pub use crate::renderer::Renderer;
 
 /// The error types used through out this crate.
 pub mod errors {
-    error_chain!{
+    use std::path::PathBuf;
+
+    error_chain! {
         foreign_links {
-            Io(::std::io::Error);
-            HandlebarsRender(::handlebars::RenderError);
-            HandlebarsTemplate(Box<::handlebars::TemplateError>);
-            Utf8(::std::string::FromUtf8Error);
+            Io(std::io::Error) #[doc = "A wrapper around `std::io::Error`"];
+            HandlebarsRender(handlebars::RenderError) #[doc = "Handlebars rendering failed"];
+            HandlebarsTemplate(Box<handlebars::TemplateError>) #[doc = "Unable to parse the template"];
+            Utf8(std::string::FromUtf8Error) #[doc = "Invalid UTF-8"];
+            SerdeJson(serde_json::Error) #[doc = "JSON conversion failed"];
         }
 
         errors {
-            Subprocess(message: String, output: ::std::process::Output) {
+            /// A subprocess exited with an unsuccessful return code.
+            Subprocess(message: String, output: std::process::Output) {
                 description("A subprocess failed")
                 display("{}: {}", message, String::from_utf8_lossy(&output.stdout))
+            }
+
+            /// An error was encountered while parsing the `SUMMARY.md` file.
+            ParseError(line: usize, col: usize, message: String) {
+                description("A SUMMARY.md parsing error")
+                display("Error at line {}, column {}: {}", line, col, message)
+            }
+
+            /// The user tried to use a reserved filename.
+            ReservedFilenameError(filename: PathBuf) {
+                description("Reserved Filename")
+                display("{} is reserved for internal use", filename.display())
+            }
+
+            /// Error with a TOML file.
+            TomlQueryError(inner: toml_query::error::Error) {
+                description("toml_query error")
+                display("{}", inner)
             }
         }
     }
 
     // Box to halve the size of Error
-    impl From<::handlebars::TemplateError> for Error {
-        fn from(e: ::handlebars::TemplateError) -> Error {
+    impl From<handlebars::TemplateError> for Error {
+        fn from(e: handlebars::TemplateError) -> Error {
             From::from(Box::new(e))
         }
     }

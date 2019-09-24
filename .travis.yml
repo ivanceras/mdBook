@@ -1,42 +1,81 @@
 language: rust
-sudo: false
 
-cache: cargo
+cache:
+  directories:
+    - "$HOME/.cargo"
+    # - "$HOME/.cache/sccache"
 
-rust:
-  - stable
-  - nightly
+env:
+  global:
+    - CRATE_NAME=mdbook
 
-os:
-  - linux
-  - osx
+matrix:
+  include:
+    - rust: stable
+      env: TARGET=x86_64-unknown-linux-gnu
+    - rust: beta
+      env: TARGET=x86_64-unknown-linux-gnu
+    - rust: nightly
+      env: TARGET=x86_64-unknown-linux-gnu
+    - rust: 1.34.0 # Minimum required Rust version
+      env: TARGET=x86_64-unknown-linux-gnu
+
+    - rust: stable
+      os: osx
+      env: TARGET=x86_64-apple-darwin
+
+before_install:
+  - |
+    # export RUSTC_WRAPPER=sccache;
+    cd "$(mktemp -d)";
+    case "$TRAVIS_OS_NAME" in
+      linux )
+          travis_retry curl -sSL 'https://github.com/mozilla/sccache/releases/download/0.2.9/sccache-0.2.9-x86_64-unknown-linux-musl.tar.gz' | tar -xzf - --strip-components=1 &&
+          sudo cp sccache /usr/local/bin/sccache;
+        ;;
+      osx )
+          travis_retry curl -sSL 'https://github.com/mozilla/sccache/releases/download/0.2.9/sccache-0.2.9-x86_64-apple-darwin.tar.gz' | tar -xzf - --strip-components=1 &&
+          sudo cp sccache /usr/local/bin/sccache;
+        ;;
+      * ) unset RUSTC_WRAPPER;;
+    esac;
+    cd "$TRAVIS_BUILD_DIR";
 
 script:
-  - cargo build --verbose
-  - cargo test --verbose
-
-after_success:
-  # Deploy the docs if the commit is on master
-  - test "$TRAVIS_PULL_REQUEST" == "false" &&
-    test "$TRAVIS_BRANCH" == "master" &&
-    test "$TRAVIS_RUST_VERSION" == "stable" &&
-    npm install stylus nib &&
-    bash ci/deploy.sh
+  - cargo test --all
+  - cargo test --all --no-default-features
+  - |
+    if [ "$TARGET" = x86_64-unknown-linux-gnu ] && [ "$TRAVIS_RUST_VERSION" = stable ]; then
+      rustup component add rustfmt && \
+      cargo fmt --all -- --check;
+    fi
 
 before_deploy:
-  # Script to create packages from the build artefacts to upload to GitHub
-  - bash ci/before_deploy.sh
+  - cargo run -- build book-example
+  - sh ci/before_deploy.sh
 
 deploy:
-  provider: releases
-  api_key:
-    secure: Z1k7WqX7z+tT4+SzTh4tBBzf11VaADB4AWuEczHtylaEb/0hRs8gaiHCNSVHm/QTp0QPWQR2Vw7uKMhVuxG7I8X7h31j3A7ulYBh/iVk0DVIrtrn2Q4WOED9CpoXLuLtk2nxo9MBViFW7mw4nJe9H2Tn9o/9oEYBuwzekvW5mh4muqUuCVTr8eQVYbs3jbC9pQy5oYjOLeUnlL9Cey5VN/nAhzAtyFP+6lIMri0PKit4JtkFou/O1MEpFYlP3VGC2lFiWuByocPKBT/L45FecS9qoHq+i6+ZCPDH2eu46nuYsDbLKAkPdGvf1MdPBPwoj0vSnZbgaTisQ4hIoBngQQQPZlPaGtcdd6g6asxSfnbA9cQhClI5oZJmg+ksxQE+peE8pnbmZ10Ix0PpIkkfWdQeMdUUCQarOTkTK54Munw+X+kp1lH19j6+krQPLBYr95fPRd4b5tWsJD2+pb/UOYFEEJxMNoUHyLCrtdCO7imOwrSUcv51+Z8UudqfPpKQeszrJcntL4owip35r3sF5TsE9YfW5qssLC164IylvP32y1AcfL1jqg8b+zrqLZKanjvDOJ1dtHHuwKqxcwf7PhAf0YjAtVSH9OIYcDzmDa0EMLrq7EK0fs6NAeb5qt6CML7pZrRS3fmOxN53Fbmj81qm6TmjQjDe4dmZlELgNow=
-  file: ${PROJECT_NAME}-${TRAVIS_TAG}-${TRAVIS_OS_NAME}.tar.gz
-  # don't delete the artifacts from previous phases
-  skip_cleanup: true
+- provider: releases
+  api_key: "$GITHUB_TOKEN"
+  file_glob: true
+  file: "$CRATE_NAME-$TRAVIS_TAG-$TARGET.*"
   on:
-    condition: $TRAVIS_RUST_VERSION = stable
+    condition: "$TRAVIS_RUST_VERSION = stable"
     tags: true
+  skip_cleanup: true
+- provider: pages
+  local_dir: book-example/book
+  skip_cleanup: true
+  github_token: "$GITHUB_TOKEN"
+  keep_history: false
+  on:
+    condition: $TRAVIS_OS_NAME = "linux" && $TRAVIS_RUST_VERSION = "stable"
+    tags: true
+
+branches:
+  only:
+    - master
+    - /^v\d+\.\d+\.\d+.*$/
 
 notifications:
   email:
